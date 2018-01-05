@@ -1,6 +1,12 @@
 import csv
 import numpy as np
+import nltk
+from nltk.data import load
+from nltk.corpus import stopwords
+from nltk.tokenize import wordpunct_tokenize
+from nltk import word_tokenize
 import collections
+from skmultilearn.adapt import MLkNN
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import pandas as pd
@@ -11,6 +17,11 @@ from sklearn.datasets import make_multilabel_classification
 from sklearn.naive_bayes import GaussianNB
 from skmultilearn.problem_transform import BinaryRelevance
 from sklearn.svm import SVC
+#nltk.download('averaged_perceptron_tagger')
+tagdict = load('help/tagsets/upenn_tagset.pickle')
+most_bigrams = []
+most_trigrams = []
+
 seperate_genre=['Action','Adventure','Animation','Biography','Comedy','Crime','Drama','Fantasy','Family','History','Horror','Music','Musical','Mystery','Romance','Sci-Fi','Sport','Thriller','War','Western']
 def readData(name):
     data = pd.read_csv(name)
@@ -18,11 +29,28 @@ def readData(name):
 
 
 def extract_features(text):
+    pos_tag = nltk.pos_tag(word_tokenize(text))
     features = []
     #length of the text
     features.append(len(text))
 
-    features.append(2)
+    ##POS tags
+    # 45 different pos tags
+    # Feature 45 - 90: Frequencies of different pos_tags are added
+    pos_list = [x[1] for x in pos_tag]
+    for tag in tagdict.keys():
+        features.append(pos_list.count(tag))
+
+    # 90-135 most common bigrams from the training set
+    bigrams = toNGrams(text, 2)
+    for bi in most_bigrams:
+        features.append(bigrams.count(bi))
+
+    # 135-180 most common trigrams from training set
+    trigrams = toNGrams(text, 3)
+    for tri in most_trigrams:
+        features.append(trigrams.count(tri))
+
     return features
 
 def getLabels(genres):
@@ -69,16 +97,7 @@ def calculateNgrams(train_data):
     most_trigrams = [x[0] for x in most_trigrams]
 
 
-
-def main():
-    data = readData("IMDB-Movie-Data.csv")
-    genres = data["Genre"]
-    descriptions = data["Description"]
-    labels = getLabels(genres)
-    features = list(map(extract_features, descriptions))
-    # X = features
-    # Y = Labels
-    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.33, random_state=42)
+def binRel(X_train, X_test, y_test, y_train):
     # initialize binary relevance multi-label classifier
     # with a gaussian naive bayes base classifier
     classifier = BinaryRelevance(GaussianNB())
@@ -86,6 +105,31 @@ def main():
     classifier.fit(X_train, y_train)
     # predict
     predictions = classifier.predict(X_test)
+    acc = accuracy_score(y_test, predictions)
+    # print len(predictions[1])
+    probabilities = classifier.predict_proba(X_test)
+    print len(predictions[0])
+    print predictions
+    print acc
+
+def main():
+    data = readData("IMDB-Movie-Data.csv")
+    genres = data["Genre"]
+    descriptions = data["Description"]
+    labels = getLabels(genres)
+    features = list(map(extract_features, descriptions))
+    calculateNgrams(descriptions)
+
+    # X = features
+    # Y = Labels
+    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.33, random_state=42)
+    #binRel(X_train, X_test, y_test, y_train)
+    classifier = MLkNN(k=4)
+    # Train
+    classifier.fit(X_train, y_train)
+    # predict
+    new_test = np.array(X_test)
+    predictions = classifier.predict(new_test)
     acc = accuracy_score(y_test, predictions)
     print acc
 
