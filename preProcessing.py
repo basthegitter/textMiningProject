@@ -2,6 +2,7 @@ import csv
 import numpy as np
 import nltk
 from nltk.data import load
+import sklearn.metrics
 from nltk.corpus import stopwords
 from nltk.tokenize import wordpunct_tokenize
 from nltk import word_tokenize
@@ -29,11 +30,11 @@ def readData(name):
 
 
 def extract_features(text):
+    global most_bigrams, most_trigrams
     pos_tag = nltk.pos_tag(word_tokenize(text))
     features = []
     #length of the text
     features.append(len(text))
-
     ##POS tags
     # 45 different pos tags
     # Feature 45 - 90: Frequencies of different pos_tags are added
@@ -43,6 +44,7 @@ def extract_features(text):
 
     # 90-135 most common bigrams from the training set
     bigrams = toNGrams(text, 2)
+
     for bi in most_bigrams:
         features.append(bigrams.count(bi))
 
@@ -50,7 +52,6 @@ def extract_features(text):
     trigrams = toNGrams(text, 3)
     for tri in most_trigrams:
         features.append(trigrams.count(tri))
-
     return features
 
 def getLabels(genres):
@@ -62,8 +63,8 @@ def getLabels(genres):
             index = seperate_genre.index(s)
             l.append(index)
         genresN.append(l)
-    labels = MultiLabelBinarizer().fit_transform(genresN)
-    return  labels
+    labels = np.array(MultiLabelBinarizer().fit_transform(genresN))
+    return labels
 
 def toNGrams(text, N):
     # Convert a text to a list of character N-grams.
@@ -81,9 +82,9 @@ def calculateNgrams(train_data):
     global most_bigrams, most_trigrams
     bigrams = []
     trigrams = []
-    for train in train_data.data:
+    for train in train_data:
         bigrams.append(toNGrams(train, 2))
-    for train in train_data.data:
+    for train in train_data:
         trigrams.append(toNGrams(train, 3))
     #Create list of most bigrams
     flatten_digram = [item for sublist in bigrams for item in sublist]
@@ -97,6 +98,7 @@ def calculateNgrams(train_data):
     most_trigrams = [x[0] for x in most_trigrams]
 
 
+
 def binRel(X_train, X_test, y_test, y_train):
     # initialize binary relevance multi-label classifier
     # with a gaussian naive bayes base classifier
@@ -105,21 +107,17 @@ def binRel(X_train, X_test, y_test, y_train):
     classifier.fit(X_train, y_train)
     # predict
     predictions = classifier.predict(X_test)
-    acc = accuracy_score(y_test, predictions)
-    # print len(predictions[1])
-    probabilities = classifier.predict_proba(X_test)
-    print len(predictions[0])
-    print predictions
-    print acc
+    print('Hamming loss: {0}'.format(sklearn.metrics.hamming_loss(y_test, predictions)))
 
 def main():
     data = readData("IMDB-Movie-Data.csv")
     genres = data["Genre"]
     descriptions = data["Description"]
     labels = getLabels(genres)
-    features = list(map(extract_features, descriptions))
     calculateNgrams(descriptions)
 
+    features = list(map(extract_features, descriptions))
+    print len(features[1])
     # X = features
     # Y = Labels
     X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.33, random_state=42)
@@ -127,11 +125,10 @@ def main():
     classifier = MLkNN(k=4)
     # Train
     classifier.fit(X_train, y_train)
-    # predict
-    new_test = np.array(X_test)
-    predictions = classifier.predict(new_test)
-    acc = accuracy_score(y_test, predictions)
-    print acc
+    #predict
+    #print X_test
+    predictions = classifier.predict(np.array(X_test))
+    print('Hamming loss: {0}'.format(sklearn.metrics.hamming_loss(y_test, predictions)))#(y_true, y_pred)
 
     ''''
     classifier = BinaryRelevance(classifier = SVC(), require_dense = [False, True])
